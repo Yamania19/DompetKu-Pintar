@@ -1,0 +1,312 @@
+<!doctype html>
+
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ECash Limit Checker — Full</title>
+  <style>
+    :root{--bg:#f6f8fb;--card:#ffffff;--muted:#6b7280;--accent:#06b6d4;--ok:#10b981;--danger:#ef4444}
+    [data-theme="dark"]{--bg:#071428;--card:#0b1220;--muted:#9aa4b2;--accent:#06b6d4;--ok:#10b981;--danger:#ef4444}
+    *{box-sizing:border-box}
+    body{font-family:Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial; margin:0; min-height:100vh; background:var(--bg); color:unset; display:flex; align-items:center; justify-content:center; padding:20px}
+    .container{width:100%; max-width:1100px}
+    .card{background:var(--card); border-radius:12px; padding:18px; box-shadow:0 6px 24px rgba(2,6,23,0.08)}
+    header{display:flex; gap:12px; align-items:center; justify-content:space-between}
+    h1{font-size:18px;margin:0}
+    p.lead{margin:0;color:var(--muted); font-size:13px}
+    .grid{display:grid; grid-template-columns:1fr 380px; gap:16px; margin-top:12px}
+    .panel{padding:12px; border-radius:10px}
+    .left{background:linear-gradient(180deg, rgba(0,0,0,0.02), rgba(0,0,0,0.01));}
+    .right{background:transparent}
+    label{display:block; font-size:13px; color:var(--muted); margin-bottom:6px}
+    input[type="text"], input[type="number"], select{width:100%; padding:10px 12px; border-radius:8px; border:1px solid rgba(0,0,0,0.08); background:transparent}
+    .providers{display:flex; flex-direction:column; gap:10px; margin-top:8px}
+    .provider{display:flex; gap:8px; align-items:center}
+    .provider .name{min-width:90px}
+    .provider input[type="checkbox"]{transform:scale(1.05)}
+    .actions{display:flex; gap:8px; margin-top:12px}
+    button{cursor:pointer; border:0; padding:10px 12px; border-radius:8px; background:var(--accent); color:#042024; font-weight:600}
+    button.ghost{background:transparent; color:var(--muted); border:1px solid rgba(0,0,0,0.06)}
+    .result{padding:12px; border-radius:8px; margin-top:12px}
+    .result.ok{background:rgba(16,185,129,0.08); color:var(--ok); border:1px solid rgba(16,185,129,0.12)}
+    .result.warn{background:rgba(239,68,68,0.08); color:var(--danger); border:1px solid rgba(239,68,68,0.12)}
+    .summary{display:flex; flex-direction:column; gap:8px}
+    .small{font-size:13px; color:var(--muted)}
+    .toast{position:fixed; right:20px; bottom:20px; background:var(--card); color:inherit; padding:12px 16px; border-radius:10px; box-shadow:0 8px 22px rgba(2,6,23,0.08); border:1px solid rgba(0,0,0,0.06)}
+    .history{max-height:260px; overflow:auto; border-radius:8px; padding:8px; border:1px dashed rgba(0,0,0,0.06)}
+    .hist-row{display:flex; justify-content:space-between; gap:8px; padding:6px 8px; border-radius:6px}
+    .badge{font-size:12px; padding:6px 8px; border-radius:999px; background:rgba(0,0,0,0.04)}
+    .controls{display:flex; gap:8px; align-items:center}
+    .toggle{display:inline-flex; align-items:center; gap:8px}
+    .sr-only{position:absolute; left:-9999px}
+    @media (max-width:980px){.grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card" id="app">
+      <header>
+        <div>
+          <h1>e-Money Limit Checker — Full</h1>
+          <p class="lead">Masukkan batas, aktifkan provider, cek pemakaian, simulasikan saldo, lihat riwayat, dan export CSV — semua tanpa server.</p>
+        </div>
+        <div class="controls">
+          <div class="toggle">
+            <label for="themeToggle" class="small">Mode gelap</label>
+            <input id="themeToggle" type="checkbox" />
+          </div>
+          <button class="ghost" id="fetchBalancesBtn">Simulasi Saldo (API)</button>
+        </div>
+      </header><div class="grid">
+    <section class="panel left">
+      <label for="limit">Batas Pengeluaran (IDR)</label>
+      <input id="limit" type="text" inputmode="numeric" value="Rp 10.000" />
+
+      <div style="height:8px"></div>
+      <label>Mode Pengecekan</label>
+      <select id="mode">
+        <option value="per">Per-provider (cek tiap e-money)</option>
+        <option value="total">Total gabungan</option>
+      </select>
+
+      <div style="height:12px"></div>
+      <label>Provider e-money (aktifkan untuk memasukkan nominal)</label>
+      <div class="providers" id="providers"></div>
+
+      <div class="actions">
+        <button id="checkBtn">Cek Sekarang</button>
+        <button class="ghost" id="addBtn">Tambah Provider</button>
+        <button class="ghost" id="resetBtn">Reset</button>
+      </div>
+
+      <div id="resultBox" style="display:none" class="result"></div>
+
+      <div style="height:12px"></div>
+      <label>Riwayat Pengecekan</label>
+      <div class="history" id="history"></div>
+
+      <div style="height:8px"></div>
+      <div class="actions">
+        <button id="exportCsv">Export CSV</button>
+        <button class="ghost" id="clearHistory">Bersihkan Riwayat</button>
+      </div>
+    </section>
+
+    <aside class="panel right">
+      <div class="summary">
+        <div class="small"><strong>Ringkasan</strong></div>
+        <div class="small" id="summaryTotal">Total aktif: Rp 0</div>
+        <div id="summaryList"></div>
+
+        <hr />
+        <div class="small"><strong>Tips</strong></div>
+        <ul class="small">
+          <li>Mode per-provider memberi notifikasi untuk setiap layanan terpisah.</li>
+          <li>Mode total berguna jika batas berlaku untuk seluruh gabungan e-money.</li>
+          <li>Riwayat disimpan di browser; gunakan export CSV untuk arsip.</li>
+        </ul>
+
+        <hr />
+        <div class="small"><strong>Simulasi API</strong></div>
+        <div class="small">Tekan <em>Simulasi Saldo (API)</em> untuk mengisi nominal otomatis dari layanan palsu.</div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+  </div>  <div id="toastRoot" aria-live="polite"></div>  <script>
+    // ---------- Utilities ----------
+    const I18 = new Intl.NumberFormat('id-ID');
+    function fmtRp(v){ return 'Rp ' + I18.format(Number(v||0)); }
+    function parseRp(s){ if(typeof s==='number') return s; return Number(String(s).replace(/[^0-9\-]+/g,'')) || 0; }
+    function nowISO(){ return new Date().toISOString(); }
+
+    // ---------- Default state ----------
+    const defaultProviders = [
+      { id:'dana', name:'Dana', active:true, amount:0 },
+      { id:'gopay', name:'GoPay', active:true, amount:0 },
+      { id:'ovo', name:'OVO', active:false, amount:0 }
+    ];
+
+    function loadState(){ try{ const raw = localStorage.getItem('emoney_full'); if(raw) return JSON.parse(raw); }catch(e){} return { limit:10000, mode:'per', providers: defaultProviders, history: [], theme:'light' }; }
+    function saveState(){ localStorage.setItem('emoney_full', JSON.stringify(state)); }
+
+    let state = loadState();
+
+    // ---------- DOM refs ----------
+    const providersEl = document.getElementById('providers');
+    const limitEl = document.getElementById('limit');
+    const modeEl = document.getElementById('mode');
+    const checkBtn = document.getElementById('checkBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const addBtn = document.getElementById('addBtn');
+    const resultBox = document.getElementById('resultBox');
+    const summaryTotal = document.getElementById('summaryTotal');
+    const summaryList = document.getElementById('summaryList');
+    const historyEl = document.getElementById('history');
+    const exportCsvBtn = document.getElementById('exportCsv');
+    const clearHistoryBtn = document.getElementById('clearHistory');
+    const fetchBalancesBtn = document.getElementById('fetchBalancesBtn');
+    const themeToggle = document.getElementById('themeToggle');
+    const toastRoot = document.getElementById('toastRoot');
+
+    // ---------- Render ----------
+    function renderProviders(){
+      providersEl.innerHTML='';
+      state.providers.forEach((p, idx)=>{
+        const div = document.createElement('div'); div.className='provider';
+        div.innerHTML = `
+          <input type="checkbox" id="cb_${p.id}" ${p.active?'checked':''} />
+          <div class="name"><label for="cb_${p.id}">${escapeHtml(p.name)}</label></div>
+          <input type="text" data-idx="${idx}" class="amt" value="${fmtRp(p.amount)}" placeholder="Rp 0" />
+          <button class="ghost" data-del="${idx}" title="Hapus">✕</button>
+        `;
+        providersEl.appendChild(div);
+      });
+
+      // handlers
+      providersEl.querySelectorAll('input[type=checkbox]').forEach(cb=>cb.addEventListener('change', e=>{
+        const id = e.target.id.replace('cb_',''); const prov = state.providers.find(x=>x.id===id); if(!prov) return; prov.active = e.target.checked; saveState(); renderSummary();
+      }));
+
+      providersEl.querySelectorAll('.amt').forEach(inp=>{
+        inp.addEventListener('input', e=>{
+          const i = Number(e.target.dataset.idx); const parsed = parseRp(e.target.value); state.providers[i].amount = parsed; e.target.value = fmtRp(parsed); saveState(); renderSummary();
+        });
+        inp.addEventListener('blur', e=>{ const parsed = parseRp(e.target.value); e.target.value = fmtRp(parsed); });
+      });
+
+      providersEl.querySelectorAll('button[data-del]').forEach(btn=>btn.addEventListener('click', e=>{
+        const i = Number(e.target.dataset.del); if(!confirm('Hapus provider ini?')) return; state.providers.splice(i,1); saveState(); renderProviders(); renderSummary();
+      }));
+    }
+
+    function renderSummary(){
+      const total = state.providers.reduce((s,p)=> s + (p.active?Number(p.amount||0):0),0);
+      summaryTotal.textContent = 'Total aktif: ' + fmtRp(total);
+      summaryList.innerHTML = '';
+      state.providers.forEach(p=>{
+        const d = document.createElement('div'); d.className='small'; d.textContent = `${p.name} • ${p.active? 'aktif' : 'nonaktif'} — ${fmtRp(p.amount)}`; summaryList.appendChild(d);
+      });
+      renderHistory();
+    }
+
+    function renderHistory(){
+      historyEl.innerHTML = '';
+      const list = state.history.slice().reverse();
+      if(list.length===0){ historyEl.innerHTML = '<div class="small">Belum ada riwayat.</div>'; return; }
+      list.forEach(h=>{
+        const row = document.createElement('div'); row.className='hist-row';
+        const left = document.createElement('div'); left.innerHTML = `<div class="small">${new Date(h.at).toLocaleString()}</div><div class="small">Mode: ${h.mode} • Batas ${fmtRp(h.limit)}</div>`;
+        const right = document.createElement('div'); right.innerHTML = `<div class="small">${h.summary}</div>`;
+        row.appendChild(left); row.appendChild(right); historyEl.appendChild(row);
+      });
+    }
+
+    // ---------- Actions ----------
+    function checkLimits(){
+      const limit = parseRp(limitEl.value);
+      const mode = modeEl.value;
+      state.limit = limit; state.mode = mode; saveState();
+
+      const active = state.providers.filter(p=>p.active).map(p=>({ ...p, amount: Number(p.amount||0) }));
+      if(active.length===0){ showToast('Tidak ada provider aktif. Aktifkan minimal satu e-money.'); resultBox.style.display='none'; return; }
+
+      let summaryText='';
+      if(mode==='per'){
+        const exceeded = active.filter(p=>p.amount>limit);
+        if(exceeded.length>0){
+          resultBox.className='result warn'; resultBox.style.display='block';
+          resultBox.innerHTML = `<strong>Terjadi pelampauan!</strong><div style="height:6px"></div>${exceeded.map(e=>`<div>${escapeHtml(e.name)}: ${fmtRp(e.amount)} (batas ${fmtRp(limit)})</div>`).join('')}`;
+          playBeep(); showToast(`Ada ${exceeded.length} provider yang melebihi batas!`);
+          summaryText = `Pelampauan: ${exceeded.map(e=>e.name+' '+fmtRp(e.amount)).join(', ')}`;
+        }else{
+          resultBox.className='result ok'; resultBox.style.display='block'; resultBox.innerHTML = `<strong>Semua baik</strong><div style="height:6px"></div><div>Tidak ada penggunaan yang melebihi batas ${fmtRp(limit)}.</div>`;
+          summaryText = 'Semua di bawah batas';
+        }
+      }else{
+        const total = active.reduce((s,p)=>s+p.amount,0);
+        if(total>limit){
+          resultBox.className='result warn'; resultBox.style.display='block'; resultBox.innerHTML = `<strong>Terjadi pelampauan total!</strong><div style="height:6px"></div><div>Total: ${fmtRp(total)} (batas ${fmtRp(limit)})</div>`;
+          playBeep(); showToast(`Total penggunaan melebihi batas (${fmtRp(total)} > ${fmtRp(limit)})`);
+          summaryText = `Total ${fmtRp(total)} melebihi batas`;
+        }else{
+          resultBox.className='result ok'; resultBox.style.display='block'; resultBox.innerHTML = `<strong>Semua baik</strong><div style="height:6px"></div><div>Total: ${fmtRp(total)} (batas ${fmtRp(limit)})</div>`;
+          summaryText = `Total ${fmtRp(total)} di bawah batas`;
+        }
+      }
+
+      // push to history
+      state.history = state.history || [];
+      state.history.push({ at: nowISO(), mode, limit, summary: summaryText, providers: JSON.parse(JSON.stringify(state.providers)) });
+      saveState(); renderHistory();
+    }
+
+    // ---------- Export CSV ----------
+    function exportCsv(){
+      if(!state.history || state.history.length===0){ showToast('Riwayat kosong — tidak ada yang diexport.'); return; }
+      const rows = [];
+      rows.push(['waktu','mode','batas','summary','provider','amount','active']);
+      state.history.forEach(h=>{
+        h.providers.forEach(p=>{
+          rows.push([h.at, h.mode, h.limit, h.summary, p.name, p.amount, p.active]);
+        });
+      });
+      const csv = rows.map(r=>r.map(c => '"' + String(c).replace(/"/g,'""') + '"').join(',')).join('
+');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = 'emoney_history.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+      showToast('CSV diunduh.');
+    }
+
+    // ---------- Simulated API ----------
+    function simulateFetchBalances(){
+      showToast('Memulai simulasi panggilan API...');
+      fetchBalancesBtn.disabled = true;
+      // simulate network delay
+      setTimeout(()=>{
+        // generate random balances close to existing amounts
+        state.providers = state.providers.map(p=>({ ...p, amount: Math.max(0, Math.round((Math.random()*0.8 + 0.2) * (p.amount || 10000))) }));
+        saveState(); renderProviders(); renderSummary(); showToast('Saldo berhasil diisi dari simulasi API.'); fetchBalancesBtn.disabled = false;
+      }, 1100 + Math.random()*900);
+    }
+
+    // ---------- Sound (beep) ----------
+    function playBeep(){ try{ const ctx = new (window.AudioContext || window.webkitAudioContext)(); const o = ctx.createOscillator(); const g = ctx.createGain(); o.type='sine'; o.frequency.value = 520; g.gain.value = 0.02; o.connect(g); g.connect(ctx.destination); o.start(); o.stop(ctx.currentTime + 0.12); }catch(e){} }
+
+    // ---------- Theme ----------
+    function applyTheme(){ const t = state.theme || 'light'; document.documentElement.setAttribute('data-theme', t==='dark'?'dark':'light'); themeToggle.checked = t==='dark'; }
+
+    // ---------- Helpers ----------
+    function showToast(msg, timeout=3000){ const t = document.createElement('div'); t.className='toast'; t.textContent = msg; toastRoot.appendChild(t); setTimeout(()=>{ t.style.opacity=0; t.style.transform='translateY(8px)'; setTimeout(()=>t.remove(),400); }, timeout); }
+    function escapeHtml(text){ return String(text).replace(/[&"'<>]/g, s=>({ '&':'&amp;','"':'&quot;','\'':'&#39;','<':'&lt;','>':'&gt;' }[s])); }
+
+    // ---------- Init ----------
+    function init(){
+      // ensure numeric text for limit
+      limitEl.value = fmtRp(state.limit || 10000);
+      modeEl.value = state.mode || 'per';
+      renderProviders(); renderSummary(); applyTheme();
+
+      checkBtn.addEventListener('click', checkLimits);
+      resetBtn.addEventListener('click', ()=>{ if(!confirm('Reset semua ke pengaturan awal?')) return; state = { limit:10000, mode:'per', providers: JSON.parse(JSON.stringify(defaultProviders)), history: [], theme:'light' }; saveState(); init(); showToast('Di-reset ke pengaturan awal.'); });
+      addBtn.addEventListener('click', ()=>{ const name = prompt('Nama provider baru (misal: LinkAja)'); if(!name) return; const id = name.toLowerCase().replace(/[^a-z0-9]+/g,'_') + '_' + Math.random().toString(36).slice(2,6); state.providers.push({ id, name, active:true, amount:0 }); saveState(); renderProviders(); renderSummary(); });
+      exportCsvBtn.addEventListener('click', exportCsv);
+      clearHistoryBtn.addEventListener('click', ()=>{ if(!confirm('Hapus seluruh riwayat?')) return; state.history = []; saveState(); renderHistory(); showToast('Riwayat dihapus.'); });
+
+      fetchBalancesBtn.addEventListener('click', simulateFetchBalances);
+
+      themeToggle.addEventListener('change', e=>{ state.theme = e.target.checked? 'dark':'light'; saveState(); applyTheme(); });
+
+      // limit input formatting
+      limitEl.addEventListener('input', e=>{ const parsed = parseRp(e.target.value); e.target.value = fmtRp(parsed); state.limit = parsed; saveState(); });
+
+      // keyboard: Enter on provider amount -> run check
+      providersEl.addEventListener('keydown', e=>{ if(e.key==='Enter'){ checkLimits(); } });
+    }
+
+    init();
+  </script></body>
+</html>
